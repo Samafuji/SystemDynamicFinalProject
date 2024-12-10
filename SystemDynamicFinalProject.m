@@ -1,7 +1,7 @@
 clc; clear; close all;
 
 % User-defined parameters
-n = 31; % Number of segments
+n = 501; % Number of segments
 num_parts = 5; % For symmetric partition
 E = 27.8e9; % Young's modulus (N/m^2)
 D = 2400; % Density (kg/m^3)
@@ -9,11 +9,11 @@ W = 35; % Width (m)
 T = 9; % Thickness (m)
 L = 1700; % Total length of the float bridge (m)
 
-alpha = 0.003;
-Kground = 1e10;
+alpha = 0.3;
+Kground = 1e11; 
 Cground = alpha * Kground;
 Kanchor = 0.7e8;
-M_box = 11000000; % Mass of box for pier
+M_box = 18984932.7; % Mass of box for pier
 waveFrequency = 0.1; % Wave frequency (Hz)
 windFrequency = 4.5963; % Wind frequency (Hz)
 simTime = 1000; % Total simulation time (s)
@@ -24,6 +24,9 @@ tspan = 0:dt:simTime;
 result = symmetric_partition(n, num_parts)
 
 wight = D*W*T*L+M_box*num_parts
+% wight = D*W*T*L;
+
+
 
 % Horizontal system matrices
 [A_horizontal, B_horizontal, C_out_horizontal, D_horizontal, ~, ~, ~, m] = ...
@@ -34,9 +37,9 @@ wight = D*W*T*L+M_box*num_parts
     calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 0);
 
 % Calculate external forces
-[Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, L/n, T, W, D, tspan, m, M_box);
+[Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, L/n, T, W, D, tspan, m, M_box,wight);
 
-Fx(:,:) = 0;
+% Fy(:,:) = 0;
 
 % Initial conditions
 x0 = zeros(2 * n, 1);
@@ -45,13 +48,32 @@ x0 = zeros(2 * n, 1);
 sys_horizontal = ss(A_horizontal, B_horizontal, C_out_horizontal, D_horizontal);
 [y_horizontal, ~, ~] = lsim(sys_horizontal, Fx, tspan, x0);
 
+
+
+
+
+
 % Run vertical simulation
 sys_vertical = ss(A_vertical, B_vertical, C_out_vertical, D_vertical);
 [y_vertical, ~, ~] = lsim(sys_vertical, Fy, tspan, x0);
 
+% -------------------------------------------------------------------------
+% System Properties
+% -------------------------------------------------------------------------
+eigenvalues = eig(A_vertical);
+natural_frequencies = abs(eigenvalues) / (2 * pi);
+damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
+
 % Unified 3D Visualization
 visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 
+% Extract the sub-system corresponding to the selected input-output pair
+sub_sys = sys_vertical(251, 250);
+
+% Bode plot for the selected input-output pair
+figure;
+bode(sub_sys);
+grid on;
 
 
 
@@ -72,7 +94,7 @@ function [A, B, C_out, D_M, M_Matrix, n, l, m] = calculate_system_matrices(n, re
     end
     
     % Baseline stiffness
-    Kr = 8 * E * Ia * l / l^4;  
+    Kr = E * Ia * l / l^4;  
     Cr = alpha * Kr;
 
     M_list = ones(1, n) * m; 
@@ -115,10 +137,12 @@ function [A, B, C_out, D_M, M_Matrix, n, l, m] = calculate_system_matrices(n, re
         end
         if i == 1 || i == n
             K_Matrix(i, i) = K_list(i) + Kground;
-        elseif result(i) == 1
+        elseif result(i) == 1 
             K_Matrix(i, i) = K_list(i) + K_list(i+1) + KWater;
-        else
+        elseif yoko == 0
             K_Matrix(i, i) = K_list(i) + K_list(i+1) + Kanchor;
+        else
+            K_Matrix(i, i) = K_list(i) + K_list(i+1);
         end
     end
 
@@ -133,7 +157,7 @@ end
 % -------------------------------------------------------------------------
 % Calculate Input Forces (wind and wave)
 % -------------------------------------------------------------------------
-function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l, T, W, D, tspan, m, M_box)
+function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l, T, W, D, tspan, m, M_box,wight)
     % Wind force calculation
     % Generate Gaussian data
     g = 9.81;
@@ -150,14 +174,17 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
     Fwind = 1/2 * low * Area * u.^2 * Cd;
 
     % Wave forces
-    [FwaveX_basic, FwaveY_basic] = calculate_wave_forces(waveFrequency, 5, 10, tspan);
+    [FwaveX_basic, FwaveY_basic] = calculate_wave_forces(waveFrequency, 5, 10, tspan,wight);
 
     ux = zeros(length(tspan), n);
     uy = zeros(length(tspan), n);
+    Fground = 6334189235;
     for i = 1:n
         if result(i) == 1
             ux(:, i) = FwaveX_basic;
             uy(:, i) = FwaveY_basic - m * g - M_box * g;
+        elseif i == 1 || i == n
+            uy(:, i) = -m*g + Fground;
         else
             uy(:, i) = -m*g;
         end
@@ -165,15 +192,6 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
 
     Fx = Fwind + ux;
     Fy = uy;
-end
-
-% -------------------------------------------------------------------------
-% System Properties
-% -------------------------------------------------------------------------
-function [eigenvalues, natural_frequencies, damping_ratios] = system_properties(A)
-    eigenvalues = eig(A);
-    natural_frequencies = abs(eigenvalues) / (2 * pi);
-    damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
 end
 
 % -------------------------------------------------------------------------
@@ -219,6 +237,8 @@ function visualize_results(t, y, n, L, result)
     end
 end
 
+
+
 function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
     % Calculate x positions along the bridge
     bridge_x = linspace(0, L, n);
@@ -248,13 +268,14 @@ function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
         hold off;
 
         % Axis settings
-        axis([0 L -yMax yMax -zMax zMax]); % Ensure valid ranges for axis limits
+        axis([0 L -zMax zMax -zMax zMax]); % Ensure valid ranges for axis limits
+        % axis([0 L -yMax yMax -zMax zMax]); % Ensure valid ranges for axis limits
         xlabel('Bridge Length (m)');
         ylabel('Horizontal Displacement (m)');
         zlabel('Vertical Displacement (m)');
         title(sprintf('Unified 3D Displacement Animation\nTime: %.2f seconds', t(i)));
         grid on;
 
-        pause(0.001); % Pause for animation effect
+        pause(0.1); % Pause for animation effect
     end
 end
