@@ -7,7 +7,7 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     Ca = 0.5; % Added mass coefficient
     Cm = 1 + Ca; % Inertia coefficient
 
-    % Pier dimensions
+    % Pontoon dimensions
     length = 110; % Length of pier (m)
     width = 23; % Width of pier (m)
     height = 8.5; % Height of pier (m)
@@ -51,7 +51,7 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y;
 
     % Static buoyancy force
-    F_static = rho * g * V; % Acts vertically upwards
+    F_static = rho * g * V % Acts vertically upwards
 
     % Total force (sum of dynamic and static components)
     F_total_x = F_dynamic_x; % No static component in x-direction

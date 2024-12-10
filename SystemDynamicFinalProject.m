@@ -1,231 +1,271 @@
 clc; clear; close all;
+main_simulation()
+function main_simulation()
+    clc; clear; close all;
 
-% ----------------------------------------------------------------
-% Build Bridge
-% ----------------------------------------------------------------
-n = 31;
-num_parts = 5; 
-result = symmetric_partition(n, num_parts);
+    % User-defined parameters
+    n = 31; % Number of segments
+    num_parts = 5; % For symmetric partition
+    E = 27.8e9; % Young's modulus (N/m^2)
+    D = 2400; % Density (kg/m^3)
+    W = 35; % Width (m)
+    T = 9; % Thickness (m)
+    L = 1700; % Total length of the float bridge (m)
 
-% or
-% result = [0 0 1 0 0 1 0 0 1 0 0];
+    D*W*T*L
+    alpha = 0.003;
+    Kground = 1e10;
+    Cground = alpha * Kground;
+    Kanchor = 0.7e8;
+    M_box = 11000000; % Mass of box for pier
+    waveFrequency = 0.1; % Wave frequency (Hz)
+    windFrequency = 4.5963; % Wind frequency (Hz)
+    simTime = 1000; % Total simulation time (s)
+    dt = 0.1;
+    tspan = 0:dt:simTime;
 
-% ----------------------------------------------------------------
-% PROPERTIES
-% ----------------------------------------------------------------
-n = length(result);
+    % Build bridge configuration (0 or 1 for pier presence)
+    result = symmetric_partition(n, num_parts)
 
-%RC Concrete
-E = 27.8*10^9;  %Young's modulus (K/m^2)
-D = 2400;       %Density (Kg/m^3)
+    % Horizontal system matrices
+    [A_horizontal, B_horizontal, C_out_horizontal, D_horizontal, ~, ~, ~, m] = ...
+        calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 1);
 
-W = 35;        %width  m
-T = 9;       %thick  m
-L = 1700;        %Total length of the float bridge  m
+    % Vertical system matrices
+    [A_vertical, B_vertical, C_out_vertical, D_vertical, ~, ~, ~, ~] = ...
+        calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 0);
 
-l = L/n;        %length of the bridge per unit
-m = 1*0.3*0.04*2400;  % mass of the bridge per unit
-m = l * T * W * D; % per block
-Ia = W*T^3/12;  %second moment of inertia
-Kr = E * Ia /l^4; %stiffness coefficient K = E * Ia / l; ==> F = kr * theta
-Kr = 8 * E * Ia * l /l^2; % x = -F_bar * l^4 / (8 *E * Ia) && F / l = F_bar
-alpha = 0.003;
-Cr = alpha*Kr; %damping coefficient
+    % Calculate external forces
+    [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, L/n, T, W, D, tspan, m, M_box);
+    
+    % Fx(:,:) = 0;
 
-%  23m
-% ----
-% |  | 110m  11000 tons  height 8.5m
-% ----
+    % Initial conditions
+    x0 = zeros(2 * n, 1);
 
+    % Run horizontal simulation
+    sys_horizontal = ss(A_horizontal, B_horizontal, C_out_horizontal, D_horizontal);
+    [y_horizontal, ~, ~] = lsim(sys_horizontal, Fx, tspan, x0);
 
+    % Run vertical simulation
+    sys_vertical = ss(A_vertical, B_vertical, C_out_vertical, D_vertical);
+    [y_vertical, ~, ~] = lsim(sys_vertical, Fy, tspan, x0);
 
-% Matrices
-M_list = ones(1, n)* m; % Mass values
-C_list = ones(1, n) * Cr; % Damping values
-K_list = ones(1, n) * Kr; % Stiffness values
-
-CWater = 0; Kground = 1e10; Cground = alpha * Kground; KWater = 0;
-M_box = 11000000; % 11000 tons
-K_anchor = 0.7*1e8;
-
-% M_Matrix
-M_Matrix = diag(M_list);
-for i = 1:n
-    if result(i) == 1
-        M_Matrix(i,i) = M_Matrix(i,i) + M_box;
-    end
+    % Unified 3D Visualization
+    visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 end
 
-% C_Matrix
-C_Matrix = zeros(n);
-for i = 1:n
-    if i > 1
-        C_Matrix(i, i-1) = -C_list(i);
-        C_Matrix(i-1, i) = -C_list(i);
-    end
-    if i == 1 || i == n
-        C_Matrix(i, i) = C_list(i) + Cground;
-    elseif result(i) == 1
-        C_Matrix(i, i) = C_list(i) + C_list(i+1) + CWater;
+
+
+
+% -------------------------------------------------------------------------
+% Calculate System Matrices
+% -------------------------------------------------------------------------
+function [A, B, C_out, D_M, M_Matrix, n, l, m] = calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, yoko)
+    l = L / n;      % segment length
+    m = l * T * W * D; % mass per block
+    
+    % Second moment of inertia (assume rectangular cross-section)
+    if yoko == 1
+        % Horizontal axis (yoko == 1)
+        Ia = (W^3 * T) / 12; 
     else
-        C_Matrix(i, i) = C_list(i) + C_list(i+1);
+        % Vertical axis (yoko == 0)
+        Ia = (W * T^3) / 12; 
     end
-end
+    
+    % Baseline stiffness
+    Kr = 8 * E * Ia * l / l^4;  
+    Cr = alpha * Kr;
 
-% K_Matrix
-K_Matrix = zeros(n);
-for i = 1:n
-    if i > 1
-        K_Matrix(i, i-1) = -K_list(i);
-        K_Matrix(i-1, i) = -K_list(i);
+    M_list = ones(1, n) * m; 
+    C_list = ones(1, n) * Cr; 
+    K_list = ones(1, n) * Kr; 
+
+    CWater = 0; 
+    KWater = 0;
+    
+    % Mass Matrix
+    M_Matrix = diag(M_list);
+    for i = 1:n
+        if result(i) == 1
+            M_Matrix(i, i) = M_Matrix(i, i) + M_box;
+        end
     end
-    if i == 1 || i == n
-        K_Matrix(i, i) = K_list(i) + Kground;
-    elseif result(i) == 1
-        K_Matrix(i, i) = K_list(i) + K_list(i+1) + KWater;
-    else
-        K_Matrix(i, i) = K_list(i) + K_list(i+1) + K_anchor;
+
+    % Damping Matrix
+    C_Matrix = zeros(n);
+    for i = 1:n
+        if i > 1
+            C_Matrix(i, i-1) = -C_list(i);
+            C_Matrix(i-1, i) = -C_list(i);
+        end
+        if i == 1 || i == n
+            C_Matrix(i, i) = C_list(i) + Cground;
+        elseif result(i) == 1
+            C_Matrix(i, i) = C_list(i) + C_list(i+1) + CWater;
+        else
+            C_Matrix(i, i) = C_list(i) + C_list(i+1);
+        end
     end
-end
 
-%% State-space representation
-A = [zeros(n), eye(n); -M_Matrix \ K_Matrix, -M_Matrix \ C_Matrix];
-B = [zeros(n); inv(M_Matrix)];
-C_out = eye(2 * n); % Identity for full-state output
-D = zeros(2 * n, n); % No direct transmission
+    % Stiffness Matrix
+    K_Matrix = zeros(n);
+    for i = 1:n
+        if i > 1
+            K_Matrix(i, i-1) = -K_list(i);
+            K_Matrix(i-1, i) = -K_list(i);
+        end
+        if i == 1 || i == n
+            K_Matrix(i, i) = K_list(i) + Kground;
+        elseif result(i) == 1
+            K_Matrix(i, i) = K_list(i) + K_list(i+1) + KWater;
+        else
+            K_Matrix(i, i) = K_list(i) + K_list(i+1) + Kanchor;
+        end
+    end
 
-% %% transfer funciton
-% [b, a] = ss2tf(A,B,C_out,D,1);
-% TF = tf(b,a)
-
-% ----------------------------------------------------------------
-% Input PROPERTIES
-% ----------------------------------------------------------------
-
-windFrequency = 4.5963; % Frequency of the sine wave (Hz)
-waveFrequency = 0.1;
-
-omega = 2 * pi * windFrequency; % Angular frequency
-tspan = 0:0.1:1000; % Time span
-% Generate sinusoidal input at a specific node
-u_node = round(n / 2); % Apply the sine wave at the middle node
-u = zeros(length(tspan), n); % Initialize input matrix
-for t = 1:length(tspan)
-    u(t, u_node+1) = 30 * (sin(omega * tspan(t)) + 1); % Sinusoidal input at the middle node
+    % State-space matrices
+    A = [zeros(n), eye(n); -M_Matrix \ K_Matrix, -M_Matrix \ C_Matrix];
+    B = [zeros(n); inv(M_Matrix)];
+    C_out = eye(2 * n); 
+    D_M = zeros(2 * n, n);
 end
 
 
-% 生成高斯分布數據
-mu = 16;          % 均值
-sigma = 1;       % 標準差
-data = (mu + sigma * randn(length(tspan), 1));
-for i = 1:n
-   u(:, i) = data*sin(i*pi/n);
+% -------------------------------------------------------------------------
+% Calculate Input Forces (wind and wave)
+% -------------------------------------------------------------------------
+function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l, T, W, D, tspan, m, M_box)
+    % Wind force calculation
+    % Generate Gaussian data
+    g = 9.81;
+    mu = 16; sigma = 1;
+    data = (mu + sigma * randn(length(tspan), 1));
+    u = zeros(length(tspan), n);
+    for i = 1:n
+        u(:, i) = data*sin(i*pi/n);
+    end
+
+    Cd = 0.7;
+    Area = l * T; 
+    low = 1.293;
+    Fwind = 1/2 * low * Area * u.^2 * Cd;
+
+    % Wave forces
+    [FwaveX_basic, FwaveY_basic] = calculate_wave_forces(waveFrequency, 5, 10, tspan);
+
+    ux = zeros(length(tspan), n);
+    uy = zeros(length(tspan), n);
+    for i = 1:n
+        if result(i) == 1
+            ux(:, i) = FwaveX_basic;
+            uy(:, i) = FwaveY_basic - m * g - M_box * g;
+        end
+        uy(:, i) = -m*g;
+    end
+
+    Fx = Fwind + ux;
+    Fy = uy;
 end
 
-v = u;
-Cd = 0.7;
-Area = l * T; % Area = length of bridge * width / n
-low = 1.293;
-Fwind = 1/2 * low * Area * v.^2 * Cd;
-
-[FwaveX, FwaveY] = calculate_wave_forces(waveFrequency, 5, 10, tspan);
-
-ux = zeros(length(tspan), n); % Initialize input matrix
-uy = zeros(length(tspan), n); % Initialize input matrix
-for i = 1:n
-   if result(i) == 1
-       ux(:, i) = FwaveX;
-       uy(:, i) = FwaveY;
-   end
+% -------------------------------------------------------------------------
+% Run Simulation
+% -------------------------------------------------------------------------
+function [y, t, x] = run_simulation(sys, Fx, tspan, x0)
+    % We only used Fx in original code. If Fy is needed, we must integrate differently.
+    % Here we assume system B input dimension equals n and we used Fx as input.
+    [y, t, x] = lsim(sys, Fx, tspan, x0);
 end
-FwaveX = ux;
-FwaveY = uy;
 
+% -------------------------------------------------------------------------
+% System Properties
+% -------------------------------------------------------------------------
+function [eigenvalues, natural_frequencies, damping_ratios] = system_properties(A)
+    eigenvalues = eig(A);
+    natural_frequencies = abs(eigenvalues) / (2 * pi);
+    damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
+end
 
-Fx = Fwind + FwaveX;
-Fy = FwaveY;
-% Initial conditions
-x0 = zeros(2 * n, 1);
+% -------------------------------------------------------------------------
+% Visualization
+% -------------------------------------------------------------------------
+function visualize_results(t, y, n, L, result)
+    bridge_x = linspace(0, L, n);
+    bridge_y = zeros(1, n);
+    zMax = max(max(y(:, 1:n))) * 1.01;
 
-sys = ss(A, B, C_out, D); % State-space system
-[y, t, x] = lsim(sys, Fx, tspan, x0);
-% [y, t] = impulse(sys);
+    figure;
+    plot(t, y(:, 1:n));
+    xlabel('Time (s)');
+    ylabel('Displacement');
+    title('Displacement Response at Each Node');
+    grid on;
+    legend;
 
-% Plot displacement response
-figure;
-plot(t, y(:, 1:n));
-xlabel('Time (s)');
-ylabel('Displacement');
-title('Displacement Response at Each Node (Sine Wave Input)');
-grid on;
-legend;
-set(gcf, 'Position', [80, 250, 800, 400])
+    figure;
+    plot(t, y(:, n+1:end));
+    xlabel('Time (s)');
+    ylabel('Velocity');
+    title('Velocity Response at Each Node');
+    grid on;
+    legend;
 
-% Plot velocity response
-figure;
-plot(t, y(:, n+1:end));
-xlabel('Time (s)');
-ylabel('Velocity');
-title('Velocity Response at Each Node (Sine Wave Input)');
-grid on;
-legend;
-set(gcf, 'Position', [1050, 250, 800, 400])
-
-
-% Eigenvalues of the system
-eigenvalues = eig(A);
-
-% Natural frequencies (in Hz)
-natural_frequencies = abs(eigenvalues) / (2 * pi); % Magnitude of eigenvalues converted to Hz
-
-% Damping ratios (optional)
-damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
-
-% Display results
-disp('Eigenvalues:');
-disp(eigenvalues);
-
-disp('Natural Frequencies (Hz):');
-disp(natural_frequencies);
-
-disp('Damping Ratios:');
-disp(damping_ratios);
-
-result
-
-% ----------------------------------------------------------------
-% Visualization: 3D Animation
-% ----------------------------------------------------------------
-bridge_x = linspace(0, L, n);
-bridge_y = zeros(1, n);
-
-if 1
-    for i = 1:length(t)
+    if 1
         figure(99);
-        % Update bridge displacement
-        bridge_z = y(i, 1:n);
-        
-        % Plot 3D bridge
-        plot3(bridge_x, bridge_y, bridge_z, '-o', 'LineWidth', 2);
-        hold on;
-        scatter3(bridge_x(result == 1), bridge_y(result == 1), bridge_z(result == 1), 50, 'r', 'filled'); % with pier
-        hold off;
-        
-        % Axis settings
-        axis([0 L -2 2 -0.04 0.04]);
-        xlabel('Bridge Length (m)');
-        ylabel('Width (m)');
-        zlabel('Displacement (m)');
-        title(sprintf('Time: %.2f seconds', t(i)));
-        grid on;
-        
-        pause(0.001); % Pause for animation effect
-    end;
+        for i = 1:length(t)
+            bridge_z = y(i, 1:n);
+            plot3(bridge_x, bridge_y, bridge_z, '-o', 'LineWidth', 2);
+            hold on;
+            scatter3(bridge_x(result == 1), bridge_y(result == 1), bridge_z(result == 1), 50, 'r', 'filled');
+            hold off;
+            axis([0 L -2 2 -zMax zMax]);
+            xlabel('Bridge Length (m)');
+            ylabel('Width (m)');
+            zlabel('Displacement (m)');
+            title(sprintf('Time: %.2f seconds', t(i)));
+            grid on;
+            pause(0.001);
+        end
+    end
 end
-% 
-% % Bode plot
-% figure;
-% bode(sys);
-% grid on;
-% title('Bode Plot of the System');
+
+function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
+    % Calculate x positions along the bridge
+    bridge_x = linspace(0, L, n);
+
+    % Calculate maximum displacements for both axes
+    yMax = max(abs(y_horizontal(:, 1:n)), [], 'all') * 1.1; % Max horizontal displacement
+    zMax = max(abs(y_vertical(:, 1:n)), [], 'all') * 1.1;   % Max vertical displacement
+
+    % Ensure positive values for axis limits
+    if yMax == 0, yMax = .1; end
+    if zMax == 0, zMax = .1; end
+
+    % Create figure for unified 3D animation
+    figure(99);
+    for i = 1:length(t)
+        % Extract displacements at the current time step
+        bridge_y_horizontal = y_horizontal(i, 1:n); % Horizontal displacements
+        bridge_z_vertical = y_vertical(i, 1:n);     % Vertical displacements
+
+        % Plot unified 3D bridge animation
+        plot3(bridge_x, bridge_y_horizontal, bridge_z_vertical, '-o', 'LineWidth', 2);
+        hold on;
+
+        % Highlight piers
+        scatter3(bridge_x(result == 1), bridge_y_horizontal(result == 1), ...
+                 bridge_z_vertical(result == 1), 50, 'r', 'filled'); % Piers
+        hold off;
+
+        % Axis settings
+        axis([0 L -yMax yMax -zMax zMax]); % Ensure valid ranges for axis limits
+        xlabel('Bridge Length (m)');
+        ylabel('Horizontal Displacement (m)');
+        zlabel('Vertical Displacement (m)');
+        title(sprintf('Unified 3D Displacement Animation\nTime: %.2f seconds', t(i)));
+        grid on;
+
+        pause(0.001); % Pause for animation effect
+    end
+end
