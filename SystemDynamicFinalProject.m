@@ -18,6 +18,7 @@ n = length(result);
 %RC Concrete
 E = 27.8*10^9;  %Young's modulus (K/m^2)
 D = 2400;       %Density (Kg/m^3)
+
 W = 35;        %width  m
 T = 9;       %thick  m
 L = 1700;        %Total length of the float bridge  m
@@ -43,9 +44,9 @@ M_list = ones(1, n)* m; % Mass values
 C_list = ones(1, n) * Cr; % Damping values
 K_list = ones(1, n) * Kr; % Stiffness values
 
-CWater = 0; Kground = 1e7; Cground = alpha * Kground; KWater = 0;
+CWater = 0; Kground = 1e10; Cground = alpha * Kground; KWater = 0;
 M_box = 11000000; % 11000 tons
-K_anchor = 0;
+K_anchor = 0.7*1e8;
 
 % M_Matrix
 M_Matrix = diag(M_list);
@@ -101,8 +102,10 @@ D = zeros(2 * n, n); % No direct transmission
 % Input PROPERTIES
 % ----------------------------------------------------------------
 
-f = 4.5963; % Frequency of the sine wave (Hz)
-omega = 2 * pi * f; % Angular frequency
+windFrequency = 4.5963; % Frequency of the sine wave (Hz)
+waveFrequency = 0.1;
+
+omega = 2 * pi * windFrequency; % Angular frequency
 tspan = 0:0.1:1000; % Time span
 % Generate sinusoidal input at a specific node
 u_node = round(n / 2); % Apply the sine wave at the middle node
@@ -126,11 +129,27 @@ Area = l * T; % Area = length of bridge * width / n
 low = 1.293;
 Fwind = 1/2 * low * Area * v.^2 * Cd;
 
+[FwaveX, FwaveY] = calculate_wave_forces(waveFrequency, 5, 10, tspan);
+
+ux = zeros(length(tspan), n); % Initialize input matrix
+uy = zeros(length(tspan), n); % Initialize input matrix
+for i = 1:n
+   if result(i) == 1
+       ux(:, i) = FwaveX;
+       uy(:, i) = FwaveY;
+   end
+end
+FwaveX = ux;
+FwaveY = uy;
+
+
+Fx = Fwind + FwaveX;
+Fy = FwaveY;
 % Initial conditions
 x0 = zeros(2 * n, 1);
 
 sys = ss(A, B, C_out, D); % State-space system
-[y, t, x] = lsim(sys, Fwind, tspan, x0);
+[y, t, x] = lsim(sys, Fx, tspan, x0);
 % [y, t] = impulse(sys);
 
 % Plot displacement response
@@ -181,27 +200,29 @@ result
 bridge_x = linspace(0, L, n);
 bridge_y = zeros(1, n);
 
-figure(99);
-for i = 1:length(t)
-    % Update bridge displacement
-    bridge_z = y(i, 1:n);
-    
-    % Plot 3D bridge
-    plot3(bridge_x, bridge_y, bridge_z, '-o', 'LineWidth', 2);
-    hold on;
-    scatter3(bridge_x(result == 1), bridge_y(result == 1), bridge_z(result == 1), 50, 'r', 'filled'); % with pier
-    hold off;
-    
-    % Axis settings
-    axis([0 L -2 2 -0.1 0.1]);
-    xlabel('Bridge Length (m)');
-    ylabel('Width (m)');
-    zlabel('Displacement (m)');
-    title(sprintf('Time: %.2f seconds', t(i)));
-    grid on;
-    
-    pause(0.001); % Pause for animation effect
-end;
+if 1
+    for i = 1:length(t)
+        figure(99);
+        % Update bridge displacement
+        bridge_z = y(i, 1:n);
+        
+        % Plot 3D bridge
+        plot3(bridge_x, bridge_y, bridge_z, '-o', 'LineWidth', 2);
+        hold on;
+        scatter3(bridge_x(result == 1), bridge_y(result == 1), bridge_z(result == 1), 50, 'r', 'filled'); % with pier
+        hold off;
+        
+        % Axis settings
+        axis([0 L -2 2 -0.04 0.04]);
+        xlabel('Bridge Length (m)');
+        ylabel('Width (m)');
+        zlabel('Displacement (m)');
+        title(sprintf('Time: %.2f seconds', t(i)));
+        grid on;
+        
+        pause(0.001); % Pause for animation effect
+    end;
+end
 % 
 % % Bode plot
 % figure;
