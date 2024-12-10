@@ -15,6 +15,7 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     V = length*width*height;
 
     Fb = 174128896;
+    Fb = 217661120;
     V = Fb / rho / g
     
     % Cross-sectional area of the floating body (m^2)
@@ -66,10 +67,10 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     Drag_y = 0.5 * rho * Cd * A * (u_y - v_y) .* abs(u_y - v_y); % y-direction
 
     % Total dynamic force
-    F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x - Froude_Krylov_xLTV - Hydrodynamic_mass_xLTV;
-    F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y - Froude_Krylov_yLTV - Hydrodynamic_mass_yLTV;
-    % F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x;
-    % F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y;
+    % F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x - Froude_Krylov_xLTV - Hydrodynamic_mass_xLTV;
+    % F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y - Froude_Krylov_yLTV - Hydrodynamic_mass_yLTV;
+    F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x;
+    F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y;
 
     % Static buoyancy force
     F_static = rho * g * V;% Acts vertically upwards

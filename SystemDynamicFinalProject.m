@@ -60,14 +60,15 @@ damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
 % Unified 2D Visualization
 visualize_results(tspan, y_horizontal, y_vertical, n, L, result);
 
-% Unified 3D Visualization
-visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 
 % bode plot
 nodes_to_plot = [1, 101, 201, 251];
 bodePlot(sys_horizontal, sys_vertical, nodes_to_plot);
 
 impulseResponsePlot(sys_horizontal, sys_vertical, nodes_to_plot);
+
+% Unified 3D Visualization
+visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 
 % -------------------------------------------------------------------------
 % Calculate System Matrices
@@ -171,6 +172,7 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
     ux = zeros(length(tspan), n);
     uy = zeros(length(tspan), n);
     Fground = 6334189235;
+    Fground = 7313664274;
     for i = 1:n
         if result(i) == 1
             ux(:, i) = FwaveX_basic;
