@@ -1,7 +1,7 @@
 function result = symmetric_partition(n, num_parts)
-    % n: 要素の数 (整数)
-    % num_parts: パートの数（整数）
-    % result: 要素が1と0で構成された配列
+    % n: elements (interger)
+    % num_parts: num of parts (odd)
+    % result: array consist of 0,1
 
     if num_parts > n
         error('num_parts need to be smaller than n');
