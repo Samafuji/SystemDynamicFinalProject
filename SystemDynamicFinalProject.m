@@ -1,59 +1,56 @@
 clc; clear; close all;
-main_simulation()
-function main_simulation()
-    clc; clear; close all;
 
-    % User-defined parameters
-    n = 31; % Number of segments
-    num_parts = 5; % For symmetric partition
-    E = 27.8e9; % Young's modulus (N/m^2)
-    D = 2400; % Density (kg/m^3)
-    W = 35; % Width (m)
-    T = 9; % Thickness (m)
-    L = 1700; % Total length of the float bridge (m)
+% User-defined parameters
+n = 31; % Number of segments
+num_parts = 5; % For symmetric partition
+E = 27.8e9; % Young's modulus (N/m^2)
+D = 2400; % Density (kg/m^3)
+W = 35; % Width (m)
+T = 9; % Thickness (m)
+L = 1700; % Total length of the float bridge (m)
 
-    D*W*T*L
-    alpha = 0.003;
-    Kground = 1e10;
-    Cground = alpha * Kground;
-    Kanchor = 0.7e8;
-    M_box = 11000000; % Mass of box for pier
-    waveFrequency = 0.1; % Wave frequency (Hz)
-    windFrequency = 4.5963; % Wind frequency (Hz)
-    simTime = 1000; % Total simulation time (s)
-    dt = 0.1;
-    tspan = 0:dt:simTime;
+alpha = 0.003;
+Kground = 1e10;
+Cground = alpha * Kground;
+Kanchor = 0.7e8;
+M_box = 11000000; % Mass of box for pier
+waveFrequency = 0.1; % Wave frequency (Hz)
+windFrequency = 4.5963; % Wind frequency (Hz)
+simTime = 1000; % Total simulation time (s)
+dt = 0.1;
+tspan = 0:dt:simTime;
 
-    % Build bridge configuration (0 or 1 for pier presence)
-    result = symmetric_partition(n, num_parts)
+% Build bridge configuration (0 or 1 for pier presence)
+result = symmetric_partition(n, num_parts)
 
-    % Horizontal system matrices
-    [A_horizontal, B_horizontal, C_out_horizontal, D_horizontal, ~, ~, ~, m] = ...
-        calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 1);
+wight = D*W*T*L+M_box*num_parts
 
-    % Vertical system matrices
-    [A_vertical, B_vertical, C_out_vertical, D_vertical, ~, ~, ~, ~] = ...
-        calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 0);
+% Horizontal system matrices
+[A_horizontal, B_horizontal, C_out_horizontal, D_horizontal, ~, ~, ~, m] = ...
+    calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 1);
 
-    % Calculate external forces
-    [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, L/n, T, W, D, tspan, m, M_box);
-    
-    % Fx(:,:) = 0;
+% Vertical system matrices
+[A_vertical, B_vertical, C_out_vertical, D_vertical, ~, ~, ~, ~] = ...
+    calculate_system_matrices(n, result, E, D, W, T, L, alpha, Kground, Cground, Kanchor, M_box, 0);
 
-    % Initial conditions
-    x0 = zeros(2 * n, 1);
+% Calculate external forces
+[Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, L/n, T, W, D, tspan, m, M_box);
 
-    % Run horizontal simulation
-    sys_horizontal = ss(A_horizontal, B_horizontal, C_out_horizontal, D_horizontal);
-    [y_horizontal, ~, ~] = lsim(sys_horizontal, Fx, tspan, x0);
+Fx(:,:) = 0;
 
-    % Run vertical simulation
-    sys_vertical = ss(A_vertical, B_vertical, C_out_vertical, D_vertical);
-    [y_vertical, ~, ~] = lsim(sys_vertical, Fy, tspan, x0);
+% Initial conditions
+x0 = zeros(2 * n, 1);
 
-    % Unified 3D Visualization
-    visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
-end
+% Run horizontal simulation
+sys_horizontal = ss(A_horizontal, B_horizontal, C_out_horizontal, D_horizontal);
+[y_horizontal, ~, ~] = lsim(sys_horizontal, Fx, tspan, x0);
+
+% Run vertical simulation
+sys_vertical = ss(A_vertical, B_vertical, C_out_vertical, D_vertical);
+[y_vertical, ~, ~] = lsim(sys_vertical, Fy, tspan, x0);
+
+% Unified 3D Visualization
+visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 
 
 
@@ -161,21 +158,13 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
         if result(i) == 1
             ux(:, i) = FwaveX_basic;
             uy(:, i) = FwaveY_basic - m * g - M_box * g;
+        else
+            uy(:, i) = -m*g;
         end
-        uy(:, i) = -m*g;
     end
 
     Fx = Fwind + ux;
     Fy = uy;
-end
-
-% -------------------------------------------------------------------------
-% Run Simulation
-% -------------------------------------------------------------------------
-function [y, t, x] = run_simulation(sys, Fx, tspan, x0)
-    % We only used Fx in original code. If Fy is needed, we must integrate differently.
-    % Here we assume system B input dimension equals n and we used Fx as input.
-    [y, t, x] = lsim(sys, Fx, tspan, x0);
 end
 
 % -------------------------------------------------------------------------

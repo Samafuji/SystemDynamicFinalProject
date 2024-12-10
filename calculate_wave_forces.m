@@ -12,7 +12,7 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     width = 23; % Width of pier (m)
     height = 8.5; % Height of pier (m)
 
-    V = length*width*height;
+    V = length*width*height*5;
 
     % Cross-sectional area of the floating body (m^2)
     A = length * width;
@@ -56,6 +56,7 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     % Total force (sum of dynamic and static components)
     F_total_x = F_dynamic_x; % No static component in x-direction
     F_total_y = F_dynamic_y + F_static; % Static buoyancy adds to y-direction force
+    F_total_y = F_static; % Static buoyancy adds to y-direction force
 end
 % 
 % rho = 1025; % Seawater density (kg/m^3)
