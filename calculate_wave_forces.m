@@ -12,12 +12,14 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     width = 23; % Width of pier (m)
     height = 8.5; % Height of pier (m)
 
-    V = length*width*height*10;
+    V = length*width*height;
 
-    Fb = rho * V * g
+    Fb = 174128896;
+    V = Fb / rho / g
     
     % Cross-sectional area of the floating body (m^2)
     A = length * width;
+    A = 4329.303;
 
     % Wave angular frequency (rad/s)
     omega = 2 * pi * frequency;
@@ -44,13 +46,30 @@ function [F_total_x, F_total_y] = calculate_wave_forces(frequency, AmplitudeX, A
     Hydrodynamic_mass_x = rho * Ca * V * (du_x - v_x); % x-direction
     Hydrodynamic_mass_y = rho * Ca * V * (du_y - v_y); % y-direction
 
+
+
+
+    % Force calculations
+    % (a) Froude-Krylov force
+    Froude_Krylov_xLTV = rho * A * du_x .* -0.3; % x-direction
+    Froude_Krylov_yLTV = rho * A * du_y .* -0.3; % y-direction
+
+    % (b) Hydrodynamic mass force (Added mass)
+    Hydrodynamic_mass_xLTV = rho * Ca * A * (du_x - v_x) .* -0.3; % x-direction
+    Hydrodynamic_mass_yLTV = rho * Ca * A * (du_y - v_y) .* -0.3; % y-direction
+
+
+
+
     % (c) Drag force
     Drag_x = 0.5 * rho * Cd * A * (u_x - v_x) .* abs(u_x - v_x); % x-direction
     Drag_y = 0.5 * rho * Cd * A * (u_y - v_y) .* abs(u_y - v_y); % y-direction
 
     % Total dynamic force
-    F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x;
-    F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y;
+    F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x - Froude_Krylov_xLTV - Hydrodynamic_mass_xLTV;
+    F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y - Froude_Krylov_yLTV - Hydrodynamic_mass_yLTV;
+    % F_dynamic_x = Froude_Krylov_x + Hydrodynamic_mass_x + Drag_x;
+    % F_dynamic_y = Froude_Krylov_y + Hydrodynamic_mass_y + Drag_y;
 
     % Static buoyancy force
     F_static = rho * g * V;% Acts vertically upwards

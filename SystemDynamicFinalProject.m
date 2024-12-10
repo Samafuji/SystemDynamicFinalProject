@@ -14,7 +14,7 @@ Kground = 1e11;
 Cground = alpha * Kground;
 Kanchor = 0.7e8;
 M_box = 18984932.7; % Mass of box for pier
-waveFrequency = 0.1; % Wave frequency (Hz)
+waveFrequency = 0.3; % Wave frequency (Hz)
 windFrequency = 4.5963; % Wind frequency (Hz)
 simTime = 1000; % Total simulation time (s)
 dt = 0.1;
@@ -49,33 +49,25 @@ sys_horizontal = ss(A_horizontal, B_horizontal, C_out_horizontal, D_horizontal);
 [y_horizontal, ~, ~] = lsim(sys_horizontal, Fx, tspan, x0);
 
 
-
-
-
-
 % Run vertical simulation
 sys_vertical = ss(A_vertical, B_vertical, C_out_vertical, D_vertical);
 [y_vertical, ~, ~] = lsim(sys_vertical, Fy, tspan, x0);
 
-% -------------------------------------------------------------------------
-% System Properties
-% -------------------------------------------------------------------------
 eigenvalues = eig(A_vertical);
 natural_frequencies = abs(eigenvalues) / (2 * pi);
 damping_ratios = -real(eigenvalues) ./ abs(eigenvalues);
 
+% Unified 2D Visualization
+visualize_results(tspan, y_horizontal, y_vertical, n, L, result);
+
 % Unified 3D Visualization
 visualize_results_unified_3d(tspan, y_horizontal, y_vertical, n, L, result);
 
-% Extract the sub-system corresponding to the selected input-output pair
-sub_sys = sys_vertical(251, 250);
+% bode plot
+nodes_to_plot = [1, 101, 201, 251];
+bodePlot(sys_horizontal, sys_vertical, nodes_to_plot);
 
-% Bode plot for the selected input-output pair
-figure;
-bode(sub_sys);
-grid on;
-
-
+impulseResponsePlot(sys_horizontal, sys_vertical, nodes_to_plot);
 
 % -------------------------------------------------------------------------
 % Calculate System Matrices
@@ -161,11 +153,11 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
     % Wind force calculation
     % Generate Gaussian data
     g = 9.81;
-    mu = 16; sigma = 1;
+    mu = 25; sigma = 1;
     data = (mu + sigma * randn(length(tspan), 1));
     u = zeros(length(tspan), n);
     for i = 1:n
-        u(:, i) = data*sin(i*pi/n);
+        u(:, i) = data;
     end
 
     Cd = 0.7;
@@ -195,50 +187,137 @@ function [Fx, Fy] = calculate_forces(n, result, windFrequency, waveFrequency, l,
 end
 
 % -------------------------------------------------------------------------
-% Visualization
+% Visualization bodePlot
 % -------------------------------------------------------------------------
-function visualize_results(t, y, n, L, result)
-    bridge_x = linspace(0, L, n);
-    bridge_y = zeros(1, n);
-    zMax = max(max(y(:, 1:n))) * 1.01;
+function bodePlot(sys_horizontal, sys_vertical, list)
+    for i = 1:length(list)
+        node_idx = list(i);
+        
+        % Horizontal system Bode plot
+        sub_sys_horizontal = sys_horizontal(node_idx, node_idx);
+        figure;
+        bode(sub_sys_horizontal);
+        grid on;
+        title(sprintf('Bode Plot (Horizontal) for Node %d', node_idx));
 
-    figure;
-    plot(t, y(:, 1:n));
-    xlabel('Time (s)');
-    ylabel('Displacement');
-    title('Displacement Response at Each Node');
-    grid on;
-    legend;
-
-    figure;
-    plot(t, y(:, n+1:end));
-    xlabel('Time (s)');
-    ylabel('Velocity');
-    title('Velocity Response at Each Node');
-    grid on;
-    legend;
-
-    if 1
-        figure(99);
-        for i = 1:length(t)
-            bridge_z = y(i, 1:n);
-            plot3(bridge_x, bridge_y, bridge_z, '-o', 'LineWidth', 2);
-            hold on;
-            scatter3(bridge_x(result == 1), bridge_y(result == 1), bridge_z(result == 1), 50, 'r', 'filled');
-            hold off;
-            axis([0 L -2 2 -zMax zMax]);
-            xlabel('Bridge Length (m)');
-            ylabel('Width (m)');
-            zlabel('Displacement (m)');
-            title(sprintf('Time: %.2f seconds', t(i)));
-            grid on;
-            pause(0.001);
-        end
+        % Vertical system Bode plot
+        sub_sys_vertical = sys_vertical(node_idx, node_idx);
+        figure;
+        bode(sub_sys_vertical);
+        grid on;
+        title(sprintf('Bode Plot (Vertical) for Node %d', node_idx));
     end
 end
 
+% -------------------------------------------------------------------------
+% Visualization impulseResponsePlot
+% -------------------------------------------------------------------------
+function impulseResponsePlot(sys_horizontal, sys_vertical, list)
+    for i = 1:length(list)
+        node_idx = list(i);
+
+        % Horizontal impulse response
+        figure;
+        impulse(sys_horizontal(node_idx, node_idx));
+        title(sprintf('Impulse Response (Horizontal) for Nodes: %s', node_idx));
+        xlabel('Time (s)');
+        ylabel('Amplitude (m)');
+        grid on;
+    
+        % Vertical impulse response
+        figure;
+        impulse(sys_vertical(node_idx, node_idx));
+        title(sprintf('Impulse Response (Vertical) for Nodes: %s', node_idx));
+        xlabel('Time (s)');
+        ylabel('Amplitude (m)');
+        grid on;
+    end
+end
+
+% -------------------------------------------------------------------------
+% Visualization phasePortrait
+% -------------------------------------------------------------------------
+function phasePortrait(sys_horizontal, sys_vertical, nodes, tspan, x0)
+    % Simulate the system response for initial conditions
+    [y_horizontal, ~, ~] = lsim(sys_horizontal, zeros(length(tspan), size(sys_horizontal.B, 2)), tspan, x0);
+    [y_vertical, ~, ~] = lsim(sys_vertical, zeros(length(tspan), size(sys_vertical.B, 2)), tspan, x0);
+
+    % Plot phase portraits for horizontal system
+    figure;
+    for i = 1:length(nodes)
+        node = nodes(i);
+        subplot(ceil(sqrt(length(nodes))), ceil(sqrt(length(nodes))), i);
+        plot(y_horizontal(:, node), y_horizontal(:, node + size(sys_horizontal.A, 1)/2));
+        xlabel('Displacement (m)');
+        ylabel('Velocity (m/s)');
+        title(sprintf('Horizontal Phase Portrait for Node %d', node));
+        grid on;
+    end
+    suptitle('Horizontal System Phase Portraits');
+
+    % Plot phase portraits for vertical system
+    figure;
+    for i = 1:length(nodes)
+        node = nodes(i);
+        subplot(ceil(sqrt(length(nodes))), ceil(sqrt(length(nodes))), i);
+        plot(y_vertical(:, node), y_vertical(:, node + size(sys_vertical.A, 1)/2));
+        xlabel('Displacement (m)');
+        ylabel('Velocity (m/s)');
+        title(sprintf('Vertical Phase Portrait for Node %d', node));
+        grid on;
+    end
+    suptitle('Vertical System Phase Portraits');
+end
+% -------------------------------------------------------------------------
+% Visualization 2D
+% -------------------------------------------------------------------------
+function visualize_results(t, y_horizontal, y_vertical, n, L, result)
+    % Define the node indices to plot
+    nodes_to_plot = [1, 251, n, find(result == 1)]; % i == 1, i == 251, i == n, and piers
+    nodes_to_plot = unique(nodes_to_plot); % Remove duplicates
+    
+    % Horizontal Displacement Plot
+    figure;
+    plot(t, y_horizontal(:, nodes_to_plot));
+    xlabel('Time (s)');
+    ylabel('Displacement (m)');
+    title('Horizontal Displacement Response (Selected Nodes)');
+    grid on;
+    legend(arrayfun(@(x) sprintf('Node %d', x), nodes_to_plot, 'UniformOutput', false));
+    
+    % Horizontal Velocity Plot
+    figure;
+    plot(t, y_horizontal(:, nodes_to_plot + n)); % Velocity components
+    xlabel('Time (s)');
+    ylabel('Velocity (m/s)');
+    title('Horizontal Velocity Response (Selected Nodes)');
+    grid on;
+    legend(arrayfun(@(x) sprintf('Node %d', x), nodes_to_plot, 'UniformOutput', false));
+    
+    % Vertical Displacement Plot
+    figure;
+    plot(t, y_vertical(:, nodes_to_plot));
+    xlabel('Time (s)');
+    ylabel('Displacement (m)');
+    title('Vertical Displacement Response (Selected Nodes)');
+    grid on;
+    legend(arrayfun(@(x) sprintf('Node %d', x), nodes_to_plot, 'UniformOutput', false));
+    
+    % Vertical Velocity Plot
+    figure;
+    plot(t, y_vertical(:, nodes_to_plot + n)); % Velocity components
+    xlabel('Time (s)');
+    ylabel('Velocity (m/s)');
+    title('Vertical Velocity Response (Selected Nodes)');
+    grid on;
+    legend(arrayfun(@(x) sprintf('Node %d', x), nodes_to_plot, 'UniformOutput', false));
+
+end
 
 
+% -------------------------------------------------------------------------
+% Visualization 3D
+% -------------------------------------------------------------------------
 function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
     % Calculate x positions along the bridge
     bridge_x = linspace(0, L, n);
@@ -252,8 +331,8 @@ function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
     if zMax == 0, zMax = .1; end
 
     % Create figure for unified 3D animation
-    figure(99);
     for i = 1:length(t)
+        figure(99);
         % Extract displacements at the current time step
         bridge_y_horizontal = y_horizontal(i, 1:n); % Horizontal displacements
         bridge_z_vertical = y_vertical(i, 1:n);     % Vertical displacements
