@@ -16,7 +16,7 @@ Kanchor = 0.7e8;
 M_box = 18984932.7; % Mass of box for pier
 waveFrequency = 0.3; % Wave frequency (Hz)
 windFrequency = 4.5963; % Wind frequency (Hz)
-simTime = 1000; % Total simulation time (s)
+simTime = 15; % Total simulation time (s)
 dt = 0.1;
 tspan = 0:dt:simTime;
 
@@ -130,7 +130,7 @@ function [A, B, C_out, D_M, M_Matrix, n, l, m] = calculate_system_matrices(n, re
         end
         if i == 1 || i == n
             K_Matrix(i, i) = K_list(i) + Kground;
-        elseif result(i) == 1 
+        elseif result(i) == 1
             K_Matrix(i, i) = K_list(i) + K_list(i+1) + KWater;
         elseif yoko == 0
             K_Matrix(i, i) = K_list(i) + K_list(i+1) + Kanchor;
@@ -221,7 +221,7 @@ function impulseResponsePlot(sys_horizontal, sys_vertical, list)
         % Horizontal impulse response
         figure;
         impulse(sys_horizontal(node_idx, node_idx));
-        title(sprintf('Impulse Response (Horizontal) for Nodes: %s', node_idx));
+        title(sprintf('Impulse Response (Horizontal) for Nodes: %d', node_idx));
         xlabel('Time (s)');
         ylabel('Amplitude (m)');
         grid on;
@@ -229,7 +229,7 @@ function impulseResponsePlot(sys_horizontal, sys_vertical, list)
         % Vertical impulse response
         figure;
         impulse(sys_vertical(node_idx, node_idx));
-        title(sprintf('Impulse Response (Vertical) for Nodes: %s', node_idx));
+        title(sprintf('Impulse Response (Vertical) for Nodes: %d', node_idx));
         xlabel('Time (s)');
         ylabel('Amplitude (m)');
         grid on;
@@ -345,12 +345,12 @@ function visualize_results_unified_3d(t, y_horizontal, y_vertical, n, L, result)
 
         % Highlight piers
         scatter3(bridge_x(result == 1), bridge_y_horizontal(result == 1), ...
-                 bridge_z_vertical(result == 1), 50, 'r', 'filled'); % Piers
+                 bridge_z_vertical(result == 1), 200, 'r', 'filled'); % Piers
         hold off;
 
         % Axis settings
-        axis([0 L -zMax zMax -zMax zMax]); % Ensure valid ranges for axis limits
-        % axis([0 L -yMax yMax -zMax zMax]); % Ensure valid ranges for axis limits
+        % axis([0 L -zMax zMax -zMax zMax]); % Ensure valid ranges for axis limits
+        axis([0 L -yMax yMax -zMax zMax]); % Ensure valid ranges for axis limits
         xlabel('Bridge Length (m)');
         ylabel('Horizontal Displacement (m)');
         zlabel('Vertical Displacement (m)');
